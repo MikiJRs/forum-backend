@@ -7,12 +7,15 @@ import (
 	"forum-backend/controllers"
 	"forum-backend/middlewares"
 	"forum-backend/utils"
+
 	"github.com/gorilla/mux"
 )
 
 func main() {
 	utils.InitDB()
 	r := mux.NewRouter()
+
+	r.HandleFunc("/api/v1/users/thirdparty/login", controllers.ThirdPartyLoginAndRegister).Methods("POST")
 
 	// Auth
 	r.HandleFunc("/api/v1/users", controllers.GetUsers).Methods("GET")

@@ -3,14 +3,16 @@
 package controllers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
-	"forum-backend/models"
-	"forum-backend/services"
-	"forum-backend/utils"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"forum-backend/models"
+	"forum-backend/services"
+	"forum-backend/utils"
 
 	"github.com/gorilla/mux"
 )
@@ -55,7 +57,6 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err := services.CreateUser(&user)
-
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 
@@ -116,14 +117,13 @@ func GetUser(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(user)
 }
-func GetUserFromToken(w http.ResponseWriter, r *http.Request) {
 
+func GetUserFromToken(w http.ResponseWriter, r *http.Request) {
 	token := r.Header.Get("Authorization")
 
 	userId, _ := utils.GetUserId(token)
 
 	user, err := services.GetUser(userId)
-
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
@@ -134,7 +134,6 @@ func GetUserFromToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func UpdateUser(w http.ResponseWriter, r *http.Request) {
-
 	var user models.User
 	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -262,5 +261,55 @@ func ProfileData(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{"user": user, "posts": posts, "comments": comments, "likes": likes, "dislikes": dislikes})
+}
 
+func ThirdPartyLoginAndRegister(w http.ResponseWriter, r *http.Request) {
+	var user models.User
+	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var token string
+
+	db := utils.GetDB()
+
+	var userId int
+
+	err := db.QueryRow("SELECT id FROM USERS WHERE email = ?", user.Email).Scan(&userId)
+	if err == sql.ErrNoRows {
+		// kullanıcı yok
+		if user.Username == "" {
+			http.Error(w, "Username is required", http.StatusBadRequest)
+			return
+		}
+		if user.Email == "" {
+			http.Error(w, "Email is required", http.StatusBadRequest)
+			return
+		}
+
+		err := services.CreateThirdPartyUser(&user)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		token, err = services.GetThirdPartyUserToken(&user)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
+	} else {
+		// kullanıcı var
+		var err error
+		token, err = services.GetThirdPartyUserToken(&user)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"token": token})
 }

@@ -3,6 +3,7 @@ package services
 import (
 	"errors"
 	"fmt"
+
 	"forum-backend/models"
 	"forum-backend/utils"
 
@@ -17,12 +18,11 @@ var secretKey = "83a20ef4d44757479d9a42cd034649f6e9227f8b466085bb49077a8ec9c4d5e
 
 func CreateUser(user *models.User) error {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
-
 	if err != nil {
 		return err
 	}
 
-	//time := time.Now().Unix()
+	// time := time.Now().Unix()
 
 	// Create the token
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
@@ -35,7 +35,6 @@ func CreateUser(user *models.User) error {
 
 	// Sign the token with the secret key
 	tokenString, err := token.SignedString([]byte(secretKey))
-
 	// Sign the token with the secret key
 	if err != nil {
 		return err
@@ -52,6 +51,48 @@ func CreateUser(user *models.User) error {
 	return nil
 }
 
+func CreateThirdPartyUser(user *models.User) error {
+	// time := time.Now().Unix()
+
+	// Create the token
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"username": user.Username,
+		"email":    user.Email,
+		//"expaires": time + 3600,
+		// TODO SESSİON KULLANILACAK
+		//"iat": time,
+	})
+
+	// Sign the token with the secret key
+	tokenString, err := token.SignedString([]byte(secretKey))
+	// Sign the token with the secret key
+	if err != nil {
+		return err
+	}
+
+	user.Token = tokenString
+
+	db := utils.GetDB()
+	_, err = db.Exec("INSERT INTO users (username, email, token, password) VALUES (?,?,?,?)", user.Username, user.Email, user.Token, "")
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func GetThirdPartyUserToken(user *models.User) (string, error) {
+	db := utils.GetDB()
+
+	var token string
+
+	err := db.QueryRow("SELECT token FROM users WHERE email =?", user.Email).Scan(&token)
+	if err != nil {
+		return "O kullanıcı yok", err
+	}
+
+	return token, nil
+}
+
 func LoginUser(user *models.User) (string, error) {
 	db := utils.GetDB()
 
@@ -63,9 +104,7 @@ func LoginUser(user *models.User) (string, error) {
 	}
 
 	err = bcrypt.CompareHashAndPassword([]byte(dbUser.Password), []byte(user.Password))
-
 	if err != nil {
-
 		return "", errors.New("wrong password")
 	}
 
